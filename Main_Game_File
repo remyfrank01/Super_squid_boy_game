@@ -1,0 +1,318 @@
+from cmu_112_graphics import *
+from tkinter import *
+import random
+
+#This program makes use of code from: 
+#http://www.cs.cmu.edu/~112/notes/notes-animations-part2.html
+#This code is a simple (auto)side scrolling game.
+#All "magic" numbers are variables based off the dimensions of the board
+# or player model and are consistent throughout the program.
+#Number ranging from 25-30 have to do with the playerModels hit box
+#The number 10 is used as the height of the walls on the side of the board
+
+class GameMode(Mode):
+    def appStarted(mode):
+        mode.gameWon = False
+        mode.scrollY = 0
+        mode.squareRad = min(mode.width, mode.height) / 20
+        mode.cx = mode.width // 2
+        mode.cy = mode.height // 2
+        mode.cyChangeRate = 0
+        url = ("https://raw.githubusercontent.com/remyfrank01/Super_squid_boy/"+
+        "master/Squid_Boy_Sprite.png")
+        spriteStrip = mode.loadImage(url)
+        mode.sprites = []
+        for i in range(4, 0, -1):
+            sprite = spriteStrip.crop((30+256*i, 30, 230+256*i, 250))
+            mode.sprites.append(sprite)
+        mode.spriteCounter = 0
+        mode.imageChange = 0
+
+        mode.walls = [(random.randrange(mode.width//2 - 45), 
+            (50*i) + 10) for i in range(mode.height//50)]
+
+        mode.removedRectangles = 0
+        mode.isGameOver = False
+        mode.scrollWalls = 10
+        mode.points = 0
+        mode.coins = [(random.randrange(mode.width//2 - 20), 
+            random.randrange(mode.height)) for i in range (6)]
+        mode.coins += [(random.randrange(mode.width//2 + 20, mode.width), 
+            random.randrange(mode.height)) for i in range (6)]
+        mode.coinRadius = 4
+        mode.coinSpeed = 20
+
+    def jumpPlayer(mode):
+        mode.cyChangeRate = -15
+    
+    def checkBounds(mode):
+        if((mode.cx + 30) > mode.width):
+            mode.cx = mode.width - 35
+        elif((mode.cx - 30) <= 0):
+            mode.cx = 35
+        elif((mode.cy - 30) <= 50):
+            mode.cy += 50
+    
+    def adjustWorld(mode):
+        for i in range(len(mode.walls)):
+            listOfTuple = list(mode.walls[i])
+            listOfTuple[1] += mode.scrollWalls
+            newCoord = tuple(listOfTuple)
+            mode.walls.remove(mode.walls[i])
+            mode.walls.insert(i, newCoord)
+    
+    def checkWalls(mode):
+        for i in range (len(mode.walls) - 1):
+            if(mode.walls[i][1] >= mode.height):
+                listOfTuple = list(mode.walls[i])
+                listOfTuple[1] = 0
+                newCoord = tuple(listOfTuple)
+                mode.walls.remove(mode.walls[i])
+                mode.walls.insert(i, newCoord)
+    
+    def keyPressed(mode, event):
+        if(event.key == "Right" or event.key == "d"):
+            mode.checkBounds()
+            mode.cx += 10
+        if(event.key == "Up" or event.key == "w"):
+            mode.checkBounds()
+            mode.jumpPlayer()
+            if((mode.height - mode.cy) > 600):  #600 is the height of the board
+                mode.scrollY -= 25
+        if(event.key == "Left" or event.key == "a"):
+            mode.checkBounds()
+            mode.cx -= 10
+        if(event.key == "S"):
+            mode.app.setActiveMode(mode.app.helpMode)
+            print('Here\'s how to play: \n\
+                1) Press Up to swim up \n\
+                2) Use Left to go left and Right to go right\n\
+                3) Do not hit the seawalls\n\
+                4) Collect 50 coins to win')
+    
+    def mousePressed(mode, event):
+        mode.coins += [(event.x, event.y)]
+        mode.coins.pop(0)
+    
+    def checkCollision(mode):
+        if(mode.cx < mode.width//2):
+            for wall in mode.walls:
+                if(mode.cy > wall[1]-25 and mode.cy < wall[1] + 25):
+                    if(mode.cx-30 < wall[0] and mode.cx > 0):
+                        mode.isGameOver = True
+                        break
+        else:
+            for wall in mode.walls:
+                if(mode.cx+15 > mode.width-wall[0] and mode.cx < mode.width):
+                    if(mode.cy > wall[1]-25 and mode.cy < wall[1] + 25):
+                        mode.isGameOver = True
+                        break
+    
+    def checkExceedBottom(mode):
+        if(mode.cy > mode.height):
+            mode.isGameOver = True
+    
+    def checkCoinCollection(mode):
+        for (cx, cy) in mode.coins:
+            if(cx < mode.cx+25 and cx > mode.cx-25):
+                if(cy < mode.cy + 25 and cy > mode.cy-25):
+                    mode.coins.remove((cx,cy))
+                    mode.points += 1
+                    mode.coins += [(random.randrange(mode.width), 0)]
+                
+    
+    def moveCoins(mode):
+        for j in range (len(mode.coins)):
+            listOfTuple = list(mode.coins[j])
+            listOfTuple[1] += mode.coinSpeed
+            newCoord = tuple(listOfTuple)
+            mode.coins.remove(mode.coins[j])
+            mode.coins.insert(j, newCoord)
+        mode.checkCoinBounds()
+        mode.checkCoinCollection()
+    
+    def checkCoinBounds(mode):
+        for k in range (len(mode.coins)):
+            if(mode.coins[k][1] >= mode.height):
+                listOfTuple = list(mode.coins[k])
+                listOfTuple[1] = 0
+                newCoord = tuple(listOfTuple)
+                mode.coins.remove(mode.coins[k])
+                mode.coins.insert(k, newCoord)
+
+    
+    def timerFired(mode):
+        if(mode.gameWon):
+            mode.gameWon = False
+            mode.points = 0
+            mode.cx = mode.width//2
+            mode.cy = mode.height//2
+            mode.app.setActiveMode(mode.app.winningMode)
+        if(mode.isGameOver):
+            mode.isGameOver = False
+            mode.points = 0
+            mode.cx = mode.width//2
+            mode.cy = mode.height//2
+            mode.app.setActiveMode(mode.app.overMode)
+            return
+
+        mode.cyChangeRate += 2
+        if(mode.spriteCounter == len(mode.sprites)):
+            mode.imageChange = -1
+        if(mode.spriteCounter == 0):
+            mode.imageChange = +1
+        mode.cy += mode.cyChangeRate
+        mode.spriteCounter = (mode.imageChange +\
+             mode.spriteCounter) % len(mode.sprites)
+        
+        
+        mode.checkCollision()
+        mode.checkExceedBottom()
+        mode.moveCoins()
+        mode.adjustWorld()
+        if(mode.points < 50):
+                mode.checkWalls()
+        if(mode.points >= 50):
+            mode.gameWon = True
+        
+    
+    def drawWalls(mode, canvas):
+        for (cx, cy) in mode.walls:
+            canvas.create_rectangle(mode.width - cx, cy,\
+                mode.width, cy + 50, fill = "purple", outline="purple")
+            canvas.create_rectangle(cx, cy, 0, \
+                cy + 50, fill = "purple", outline="purple")
+    
+    def drawCoins(mode, canvas):
+        for i in range(len(mode.coins)):
+            currCoinCx = mode.coins[i][0]
+            currCoinCy = mode.coins[i][1]
+            canvas.create_oval(currCoinCx-mode.coinRadius, 
+                currCoinCy-mode.coinRadius, currCoinCx+mode.coinRadius,
+                currCoinCy+mode.coinRadius, fill = "gold")
+    
+    def drawPointCount(mode, canvas):
+        canvas.create_text(mode.width//2, 15, text=f'Points: {mode.points}',\
+            font="ComicSans 26 bold")
+            
+    
+    def redrawAll(mode, canvas):
+        canvas.create_rectangle(0,0,mode.width,mode.height, fill = "cyan")
+
+        sprite = mode.scaleImage(mode.sprites[mode.spriteCounter], .5)
+        x0 = mode.cx
+        y0 = mode.cy 
+
+        canvas.create_image(x0, y0, image = ImageTk.PhotoImage(sprite))
+        mode.drawCoins(canvas)
+        mode.drawWalls(canvas)
+        mode.drawPointCount(canvas)
+
+
+class TitleScreenMode(Mode):
+    def appStarted(mode):
+        url = ("https://raw.githubusercontent.com/remyfrank01/Super_squid_boy/"+
+        "master/Squid_Boy_Sprite.png")
+        spriteStrip = mode.loadImage(url)
+        mode.sprites = []
+        for i in range(4, 0, -1):
+            sprite = spriteStrip.crop((30+256*i, 30, 230+256*i, 250))
+            mode.sprites.append(sprite)
+        mode.imageChange = 0
+        mode.spriteCounter = 0
+        mode.imageCx = 0
+        mode.imageCrawlRate = 5
+    
+    def checkImageBounds(mode):
+        if(mode.imageCx > mode.width):
+            mode.imageCrawlRate *= -1
+        if(mode.imageCx < 0):
+            mode.imageCrawlRate *= -1
+    
+    def timerFired(mode):
+        if(mode.spriteCounter == len(mode.sprites)):
+            mode.imageChange = -1
+        if(mode.spriteCounter == 0):
+            mode.imageChange = +1
+        mode.spriteCounter = (mode.imageChange +\
+             mode.spriteCounter) % len(mode.sprites)
+        mode.imageCx += mode.imageCrawlRate
+        mode.checkImageBounds()
+
+    def redrawAll(mode, canvas):
+        sprite = mode.scaleImage(mode.sprites[mode.spriteCounter], .5)
+
+        canvas.create_rectangle(0,0,mode.width, mode.height, fill="black")
+        font = 'ComicSans 26 bold'
+        canvas.create_text(mode.width/2, 150, \
+            text='Super Squid Boy', font=font, fill="red")
+        canvas.create_text(mode.width/2, 250, \
+            text='Press any', font=font, fill="white")
+        canvas.create_text(mode.width/2, 300, \
+            text='key for the game!', font=font, fill="white")
+        canvas.create_image(mode.imageCx, mode.height//2 + 200,\
+            image=ImageTk.PhotoImage(sprite))
+
+    def keyPressed(mode, event):
+        mode.app.setActiveMode(mode.app.gameMode)
+
+class HelpMode(Mode):
+    def redrawAll(mode, canvas):
+        font = 'ComicSans 26 bold'
+        canvas.create_rectangle(0,0, mode.width, mode.height, fill="light blue")
+        canvas.create_text(mode.width/2, 150, \
+            text='See console for instructions', font=font)
+        canvas.create_text(mode.width/2, 350, \
+            text='Press any key to \nreturn to the game!', font=font)
+
+    def keyPressed(mode, event):
+        mode.app.setActiveMode(mode.app.gameMode)
+
+class WinMode(Mode):
+    def appStarted(mode):
+        url = 'https://i.redd.it/n78ip3x31ve31.jpg'
+        mode.photo = mode.loadImage(url)
+        mode.photoNew = mode.scaleImage(mode.photo, .5)
+    
+    def keyPressed(mode, event):
+        if(event.key == "r"):
+            mode.app.setActiveMode(mode.app.gameMode)
+
+    def redrawAll(mode, canvas):
+        canvas.create_rectangle(0,0, mode.width, mode.height, fill = "black")
+        canvas.create_text(mode.width//2, 25, text="Victory", fill = "white",\
+            font="26")
+        canvas.create_text(mode.width//2, 50, text="Press r to restart",\
+            fill="white", font="26")
+        canvas.create_image(mode.width//2, mode.height//2,\
+            image=ImageTk.PhotoImage(mode.photoNew))
+
+class GameOverMode(Mode):
+    def keyPressed(mode, event):
+        if(event.key == 't'):
+            mode.app.setActiveMode(mode.app.titleScreenMode)
+
+    def redrawAll(mode, canvas):
+        canvas.create_rectangle(0,0,mode.width,mode.height,fill="black")
+        canvas.create_text(mode.width//2, mode.height//2, text="Game Over",\
+            font="ComicSans 30 bold", fill="red")
+        canvas.create_text(mode.width//2, mode.height//2 + 50,\
+            text="Press \'t\' Key", font="ComicSans 30 bold", fill="red")
+
+class MyModalApp(ModalApp):
+    def appStarted(app):
+        app.titleScreenMode = TitleScreenMode()
+        app.overMode = GameOverMode()
+        app.gameMode = GameMode()
+        app.helpMode = HelpMode()
+        app.winningMode = WinMode()
+        app.setActiveMode(app.titleScreenMode)
+        app.timerDelay = 75
+        
+def main():
+    cs112_f19_week9_linter.lint()
+    testAll()
+    app = MyModalApp(width=500, height=700)
+
+if __name__ == '__main__':
+    main()
